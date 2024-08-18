@@ -1,0 +1,44 @@
+{
+  "author": "Jee Mok <jee.ict@hotmail.com>",
+  "bin": {
+    "better-npm-audit": "index.js"
+  },
+  "dependencies": {
+    "commander": "^8.0.0",
+    "dayjs": "^1.10.6",
+    "lodash.get": "^4.4.2",
+    "semver": "^7.6.3",
+    "table": "^6.7.1"
+  },
+  "description": "Reshape into a better npm audit for the community and encourage more people to include security audit into their process.",
+  "engines": {
+    "node": ">= 8.12"
+  },
+  "keywords": [
+    "npm",
+    "audit",
+    "skip",
+    "ignore",
+    "exclude",
+    "exceptions",
+    "node",
+    "security",
+    "advisory",
+    "vulnerabilities",
+    "continuous integration",
+    "dependencies",
+    "check",
+    "build",
+    "script",
+    "nsp",
+    "ci"
+  ],
+  "license": "MIT",
+  "main": "index.js",
+  "name": "better-npm-audit",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeemok/better-npm-audit"
+  },
+  "version": "3.8.3"
+}
