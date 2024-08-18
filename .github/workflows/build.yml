@@ -1,0 +1,125 @@
+name: Build
+
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@main
+      with:
+        fetch-depth: 0
+        path: better-npm-audit
+    - name: Build
+      shell: bash
+      run: |
+        cd better-npm-audit
+        
+        # Configure git to be more predictable and deterministic
+        git config core.autocrlf false
+        git config core.ignorecase false
+        git config core.fscache true
+        git config core.longpaths true
+        git config diff.renameLimit 0
+        git config status.renameLimit 0
+        git config merge.renameLimit 0
+        git config http.lowSpeedLimit 0
+        git config http.lowSpeedTime 300
+        git config http.postBuffer 1048576000
+        git config pack.threads 1
+        git config index.threads 0
+        
+        # Check better-npm-audit version on npm
+        export better_npm_audit_version=$(curl -sS 'https://registry.npmjs.org/better-npm-audit' | python -c "import sys, json; print(json.load(sys.stdin)['dist-tags']['latest'])")
+        if [ -f "package.json" ] && [ $better_npm_audit_version == $(cat package.json | python -c "import sys, json; print(json.load(sys.stdin)['version'])") ]; then
+            exit 0
+        fi
+        
+        # Roll back the repository
+        git reset --hard $(git rev-list --max-parents=0 HEAD)
+        git clean -dffx
+        
+        # Install using npm 6
+        # Later versions fail to create a sane dependency tree in some situations
+        export npm_version=$(curl -sS 'https://registry.npmjs.org/npm' | python -c "import sys, json; print(json.load(sys.stdin)['dist-tags']['latest-6'])")
+        wget -nv -O "npm-$npm_version.tgz" "https://registry.npmjs.org/npm/-/npm-$npm_version.tgz"
+        mkdir -p "bin/npm"
+        tar -xzf "npm-$npm_version.tgz" --strip-components=1 -C "bin/npm"
+        rm "npm-$npm_version.tgz"
+        
+        # Initialize dummy package
+        node bin/npm/bin/npm-cli.js init -y
+        sed -i 's/"name": "better-npm-audit"/"name": "npm"/' -- 'package.json'
+        
+        # Install better-npm-audit as a dependency
+        node bin/npm/bin/npm-cli.js install --no-audit --no-bin-links --no-fund --ignore-scripts --no-optional "better-npm-audit@$better_npm_audit_version"
+        
+        # Remove npm
+        rm -r bin/
+        rm package.json
+        rm package-lock.json
+        
+        # Modify package.json to match the better-npm-audit tarball from npm
+        sed -i -z 's|\n  "_phantomChildren": {\n    "[a-zA-Z0-9\n -"'\''-*,./:@_~-]*\n  },\n|\n|' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_requested": {/,/}/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_requiredBy": \[/,/\]/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"bugs": {/,/}/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"scripts": {/,/}/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"devDependencies": {/,/}/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_from":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_id":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_inBundle":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_integrity":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_location":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_phantomChildren":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_resolved":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_shasum":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_spec":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"_where":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"bundleDependencies":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"deprecated":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i '/"homepage":/d' -- 'node_modules/better-npm-audit/package.json'
+        sed -i -z 's/  "author": {\n    "name": "Jee Mok",\n    "email": "jee.ict@hotmail.com"\n  },/  "author": "Jee Mok <jee.ict@hotmail.com>",/' -- 'node_modules/better-npm-audit/package.json'
+        sed -i -z 's|  "repository": {\n    "type": "git",\n    "url": "git+https://github.com/jeemok/better-npm-audit.git"\n  },|  "repository": {\n    "type": "git",\n    "url": "https://github.com/jeemok/better-npm-audit"\n  },|' -- 'node_modules/better-npm-audit/package.json'
+        
+        # Patch better-npm-audit
+        rm -rf node_modules/better-npm-audit/.README/
+        rm -rf node_modules/better-npm-audit/.github/
+        rm -rf node_modules/better-npm-audit/.vscode/
+        rm -rf node_modules/better-npm-audit/test/
+        rm -f node_modules/better-npm-audit/.eslintrc.js
+        rm -f node_modules/better-npm-audit/.nsprc.sample
+        rm -f node_modules/better-npm-audit/.prettierrc.json
+        rm -f node_modules/better-npm-audit/tsconfig.json
+        sed -i 's|src="\./\.README/|src="https://raw.githubusercontent.com/jeemok/better-npm-audit/master/.README/|' -- node_modules/better-npm-audit/README.md
+        sed -i 's/console\.error/console.log/' -- node_modules/better-npm-audit/index.js
+        sed -i 's/console\.error/console.log/' -- node_modules/better-npm-audit/src/handlers/handleFinish.js
+        sed -i 's/console\.info/console.log/' -- node_modules/better-npm-audit/src/utils/print.js
+        sed -i 's/console\.info/console.log/' -- node_modules/better-npm-audit/src/utils/vulnerability.js
+        sed -i 's/console\.warn/console.log/' -- node_modules/better-npm-audit/src/utils/vulnerability.js
+        sed -i "/  All good!');/d" -- node_modules/better-npm-audit/src/handlers/handleFinish.js
+        sed -i "s/'npm audit'/'npm --no-offline audit'/" -- node_modules/better-npm-audit/src/handlers/handleInput.js
+        sed -i '/header: {/,/},/d' -- node_modules/better-npm-audit/src/utils/print.js
+        sed -i -z 's|\n    // Handle unused exceptions\n    vulnerability_1.handleUnusedExceptions(unusedExceptionIds, unusedExceptionModules);\n|\n|' -- node_modules/better-npm-audit/src/handlers/handleFinish.js
+        
+        # Add better-npm-audit to the repository
+        rm -rf node_modules/better-npm-audit/node_modules/
+        cp -r node_modules/better-npm-audit ..
+        rm -r node_modules/
+        
+        # Add missing files
+        git remote add jeemok https://github.com/jeemok/better-npm-audit.git
+        git fetch --force --depth=1 --no-tags jeemok master:refs/remotes/jeemok/master
+        git restore --source=refs/remotes/jeemok/master -- CHANGELOG.md LICENSE
+        
+        # Push to GitHub
+        git add -f .
+        git -c user.name="GitHub" -c user.email="noreply@github.com" commit --author="github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>" -m"$better_npm_audit_version" | sed -n 1p
+        git tag -f "$better_npm_audit_version"
+        git push --force
+        git push -f origin "refs/tags/$better_npm_audit_version:refs/tags/$better_npm_audit_version"
